@@ -17,7 +17,9 @@ func TestDomainContract(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), clidomain.Analyzer,
 		"internal/domain/greet", "internal/domain/drifted",
 		"internal/domain/hollow", "internal/domain/malformed", "internal/domain/bare", "internal/domain/grouped",
-		"internal/domain/tenant", "internal/domain/tenant/create", "internal/domain/tenant/list")
+		"internal/domain/tenant", "internal/domain/tenant/create", "internal/domain/tenant/list",
+		"internal/domain/shape", "internal/domain/varrun", "internal/domain/impostor",
+		"internal/domain/exttest", "internal/domain/grouphelp", "internal/domain/aliasmethods")
 }
 
 // TestTheSharedVocabularyPackageIsNotACommand pins that internal/domain itself

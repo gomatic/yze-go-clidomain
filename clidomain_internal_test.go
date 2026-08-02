@@ -9,21 +9,24 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestIsNamedRejectsNonNamedAndWrongPackage pins the type classifier's guards:
-// a type that is not named at all, a named type from the wrong package, and one
-// whose name differs are none of them the contract's type.
-func TestIsNamedRejectsNonNamedAndWrongPackage(t *testing.T) {
+// TestIsPackageTypeMatchesByImportPath pins the type classifier's guards: a
+// type that is not named at all, one whose name differs, and — the spoofing
+// case — a type of the right NAME from a package that merely shares the
+// standard library package's short name are none of them the contract's type.
+// Only the declaring package's import PATH matches.
+func TestIsPackageTypeMatchesByImportPath(t *testing.T) {
 	t.Parallel()
 	want := assert.New(t)
 
-	pkg := types.NewPackage("example.com/other", "other")
-	named := types.NewNamed(types.NewTypeName(0, pkg, "Config", nil), types.NewStruct(nil, nil), nil)
+	spoof := types.NewPackage("example.com/context", "context")
+	spoofed := types.NewNamed(types.NewTypeName(0, spoof, "Context", nil), types.NewStruct(nil, nil), nil)
+	stdlib := types.NewPackage("context", "context")
+	genuine := types.NewNamed(types.NewTypeName(0, stdlib, "Context", nil), types.NewStruct(nil, nil), nil)
 
-	want.False(isNamed(types.Typ[types.String], "", "Config"), "a basic type is not the contract type")
-	want.False(isNamed(named, "context", "Config"), "the right name in the wrong package does not match")
-	want.False(isNamed(named, "", "Result"), "the wrong name does not match")
-	want.True(isNamed(named, "", "Config"), "an unqualified match ignores the package")
-	want.True(isNamed(named, "other", "Config"), "a qualified match checks the package")
+	want.False(isPackageType(types.Typ[types.String], "context", "Context"), "a basic type is not the contract type")
+	want.False(isPackageType(spoofed, "context", "Context"), "a look-alike package name does not match the path")
+	want.False(isPackageType(genuine, "context", "Timer"), "the wrong name does not match")
+	want.True(isPackageType(genuine, "context", "Context"), "the declaring path and name match")
 }
 
 // TestIsPointerToRequiresAPointer pins that a non-pointer is never a pointer to
@@ -35,8 +38,8 @@ func TestIsPointerToRequiresAPointer(t *testing.T) {
 	pkg := types.NewPackage("log/slog", "slog")
 	logger := types.NewNamed(types.NewTypeName(0, pkg, "Logger", nil), types.NewStruct(nil, nil), nil)
 
-	want.False(isPointerTo(logger, "slog", "Logger"), "the value type is not the pointer type")
-	want.True(isPointerTo(types.NewPointer(logger), "slog", "Logger"))
+	want.False(isPointerTo(logger, "log/slog", "Logger"), "the value type is not the pointer type")
+	want.True(isPointerTo(types.NewPointer(logger), "log/slog", "Logger"))
 }
 
 // TestIsDomainCommandBoundsTheScope pins which package paths are in scope: any
@@ -105,19 +108,19 @@ func TestDeclAtFindsTheDeclarationOrNothing(t *testing.T) {
 	assert.Nil(t, declAt(nil, token.Pos(42)), "no files find nothing")
 }
 
-// TestFirstMethodFindsBehaviourOnConfig pins the behaviour check: a type with a
-// method reports its position, and a type with none — or one that is not a
-// named type at all — reports nothing.
-func TestFirstMethodFindsBehaviourOnConfig(t *testing.T) {
+// TestHasMethodsFindsBehaviourOnConfig pins the behaviour check: a type with a
+// method has behaviour, and a type with none — or one that is not a named type
+// at all — has none.
+func TestHasMethodsFindsBehaviourOnConfig(t *testing.T) {
 	t.Parallel()
 	want := assert.New(t)
 
-	want.False(firstMethod(types.Typ[types.String]).IsValid(), "a basic type declares no method")
+	want.False(hasMethods(types.Typ[types.String]), "a basic type declares no method")
 
 	bare := types.NewNamed(types.NewTypeName(0, nil, "Config", nil), types.NewStruct(nil, nil), nil)
-	want.False(firstMethod(bare).IsValid(), "a Config with no methods carries no behaviour")
+	want.False(hasMethods(bare), "a Config with no methods carries no behaviour")
 
 	sig := types.NewSignatureType(types.NewVar(0, nil, "c", bare), nil, nil, nil, nil, false)
 	bare.AddMethod(types.NewFunc(token.Pos(7), nil, "Validate", sig))
-	want.Equal(token.Pos(7), firstMethod(bare), "a method's position is reported")
+	want.True(hasMethods(bare), "a declared method is behaviour")
 }

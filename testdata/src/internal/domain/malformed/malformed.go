@@ -10,7 +10,7 @@ type Result struct{ Out string }
 
 // Run is declared but breaks the contract: no logger, not variadic, and it
 // returns a bare error rather than (Result, error).
-func Run(_ context.Context, cfg Config) error { // want "Run must take"
+func Run(_ context.Context, cfg Config) error { // want "Run must be a function"
 	_ = cfg
 	return nil
 }

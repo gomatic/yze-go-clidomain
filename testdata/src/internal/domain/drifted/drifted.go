@@ -10,12 +10,12 @@ import (
 type argument = string
 
 // Config here wrongly carries behaviour.
-type Config struct {
+type Config struct { // want "Config carries no behaviour"
 	Name string
 }
 
 // Validate is behaviour on Config, which belongs in Run.
-func (c Config) Validate() error { return nil } // want "Config carries no behaviour"
+func (c Config) Validate() error { return nil }
 
 // Result is the outcome.
 type Result struct{ Out string }
