@@ -1,4 +1,4 @@
-package cliopinion
+package clidomain
 
 import (
 	"go/ast"
@@ -39,18 +39,23 @@ func TestIsPointerToRequiresAPointer(t *testing.T) {
 	want.True(isPointerTo(types.NewPointer(logger), "slog", "Logger"))
 }
 
-// TestIsDomainCommandBoundsTheScope pins which package paths are in scope: a
-// per-verb domain package is, the shared vocabulary package and anything
-// outside the domain tier are not.
+// TestIsDomainCommandBoundsTheScope pins which package paths are in scope: any
+// package beneath the domain tier is — at any depth — while the shared
+// vocabulary package, anything outside the tier, and look-alike segments are
+// not.
 func TestIsDomainCommandBoundsTheScope(t *testing.T) {
 	t.Parallel()
 	want := assert.New(t)
 
 	want.True(isDomainCommand("github.com/o/r/internal/domain/greet"))
 	want.True(isDomainCommand("internal/domain/greet"))
+	want.True(isDomainCommand("github.com/o/r/internal/domain/tenant/create"), "a nested verb is in scope")
+	want.True(isDomainCommand("internal/domain/tenant/create"), "a nested verb is in scope without a module prefix")
 	want.False(isDomainCommand("internal/domain"), "the shared vocabulary package declares no command")
+	want.False(isDomainCommand("github.com/o/r/internal/domain"), "the vocabulary package with a module prefix")
 	want.False(isDomainCommand("internal/app/commands/greet"))
 	want.False(isDomainCommand("internal/greeting"))
+	want.False(isDomainCommand("myinternal/domain/greet"), "a segment merely ending in the tier name is not the tier")
 }
 
 // TestVariadicSpellingReadsTheSourceName pins that the check reads how the

@@ -1,4 +1,4 @@
-module github.com/gomatic/yze-go-cliopinion
+module github.com/gomatic/yze-go-clidomain
 
 go 1.26.4
 

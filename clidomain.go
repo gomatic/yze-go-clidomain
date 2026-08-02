@@ -1,13 +1,14 @@
-// Package cliopinion provides a go/analysis analyzer enforcing the domain tier
+// Package clidomain provides a go/analysis analyzer enforcing the domain tier
 // of the opinionated three-tier CLI layout.
 //
 // The layout splits a CLI into three tiers. The APP tier
 // (internal/app/commands/<verb>) owns flags and help text; the DOMAIN tier
 // (internal/domain/<verb>) owns orchestration; the implementation tier
-// (internal/<capability>) owns reusable logic. Two analyzers already police the
-// other parts — yze/layout checks that a command package and its domain package
-// correspond, and yze/pkgstd checks the command package's own shape — so this
-// one covers the tier neither reaches: the domain package's contract.
+// (internal/<capability>) owns reusable logic. The other parts are policed
+// elsewhere — stickler/clilayout checks that command and domain packages
+// correspond across the whole module, and yze/cliapp checks the command
+// package's own shape — so this one covers the tier neither reaches: the
+// domain package's contract.
 //
 // That contract is exact, which is what makes it checkable. Every domain
 // package declares a Config carrying the flags the CLI binds and NO behaviour, a
@@ -22,16 +23,17 @@
 // redeclare `type argument = string` per package, which is the same concept
 // named differently in every package that uses it.
 //
-// Scope is packages under internal/domain/<verb> only. The shared
-// internal/domain vocabulary package itself declares no command, so it is
-// skipped.
-package cliopinion
+// Scope is every package beneath internal/domain/, at any depth — a nested
+// verb like internal/domain/tenant/create is as much a verb as a top-level
+// one. The shared internal/domain vocabulary package itself declares no
+// command, so it is skipped, and so is any grouping or helper package that
+// declares no element of the contract.
+package clidomain
 
 import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"path"
 	"strings"
 
 	goyze "github.com/gomatic/go-yze"
@@ -59,16 +61,16 @@ const sharedArgument qualifiedName = "domain.Argument"
 
 // Analyzer reports domain packages that break the three-tier CLI contract.
 var Analyzer = &analysis.Analyzer{
-	Name: "cliopinion",
+	Name: "clidomain",
 	Doc:  "reports domain packages that break the opinionated three-tier CLI contract (Config, Result, Run)",
 	Run:  run,
 }
 
 // Registration declares this analyzer to the yze framework.
 var Registration = goyze.Registration{
-	Name:       "cliopinion",
+	Name:       "clidomain",
 	Categories: []goyze.Category{"cli", "structure"},
-	URL:        "https://docs.gomatic.dev/yze/cliopinion",
+	URL:        "https://docs.gomatic.dev/yze/clidomain",
 	Analyzer:   Analyzer,
 }
 
@@ -111,14 +113,17 @@ func run(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-// isDomainCommand reports whether the path names a per-verb domain package —
-// internal/domain/<verb> — and not the shared internal/domain vocabulary
-// package, which declares no command of its own. The synthesized `.test` main
-// package is excluded: it is generated, not written.
+// isDomainCommand reports whether the path names a package beneath the domain
+// tier — internal/domain/<path>, at ANY depth, so a nested verb like
+// internal/domain/tenant/create is in scope — and not the shared
+// internal/domain vocabulary package, which declares no command of its own.
+// Whether a package beneath the tier is a verb (checked) or a grouping/helper
+// package (skipped) is decided by declaresContract, not by depth. The
+// synthesized `.test` main package is excluded: it is generated, not written.
 func isDomainCommand(pkg packagePath) bool {
 	trimmed := strings.TrimSuffix(strings.TrimSuffix(string(pkg), "_test"), ".test")
-	dir, verb := path.Split(trimmed)
-	return strings.HasSuffix(strings.TrimSuffix(dir, "/"), domainDir) && verb != ""
+	before, rest, found := strings.Cut(trimmed, domainDir+"/")
+	return found && rest != "" && (before == "" || strings.HasSuffix(before, "/"))
 }
 
 // declaresContract reports whether the package declares ANY element of the

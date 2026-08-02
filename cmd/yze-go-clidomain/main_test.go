@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/analysis"
 
-	cliopinion "github.com/gomatic/yze-go-cliopinion"
+	clidomain "github.com/gomatic/yze-go-clidomain"
 )
 
 func TestMainRunsTheAnalyzer(t *testing.T) {
@@ -20,5 +20,5 @@ func TestMainRunsTheAnalyzer(t *testing.T) {
 	main()
 
 	require.NotNil(t, got)
-	assert.Same(t, cliopinion.Analyzer, got)
+	assert.Same(t, clidomain.Analyzer, got)
 }
