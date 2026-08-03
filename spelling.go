@@ -34,17 +34,33 @@ func reportVariadic(pass *analysis.Pass, fn *types.Func, sig *types.Signature) {
 }
 
 // impostorPath is the import path the variadic qualifier resolves to when it
-// is NOT the shared vocabulary package — empty when it is the genuine
-// article. A qualifier that does not resolve to a package at all also yields
-// empty: the type checker guarantees a qualified type's qualifier is a
-// package in compiled code, so an unresolved one fails open rather than
-// inventing a finding.
+// is NOT a vocabulary package the verb may speak — empty when it is genuine. A
+// qualifier that does not resolve to a package at all also yields empty: the
+// type checker guarantees a qualified type's qualifier is a package in
+// compiled code, so an unresolved one fails open rather than inventing a
+// finding.
 func impostorPath(info *types.Info, sel *ast.SelectorExpr, pkg packagePath) pkgPath {
 	imported := importedBy(info, sel.X.(*ast.Ident))
-	if imported == "" || imported == sharedVocabulary(pkg) {
+	if imported == "" || speaks(pkg, imported) {
 		return ""
 	}
 	return imported
+}
+
+// speaks reports whether a verb package may take its vocabulary from imported:
+// the internal/domain root it sits beneath, or any group package between that
+// root and the verb. A command group extends the root vocabulary for its own
+// subcommands — internal/domain/client for the client verbs — so an ancestor
+// is the shared vocabulary at its own level. A package that is not an ancestor
+// is not this verb's vocabulary, however it is aliased: another group's
+// package is borrowed, and anything outside internal/domain is an impostor.
+func speaks(verb packagePath, imported pkgPath) bool {
+	root := sharedVocabulary(verb)
+	if imported == root {
+		return true
+	}
+	return strings.HasPrefix(string(imported), string(root)+"/") &&
+		strings.HasPrefix(string(verb), string(imported)+"/")
 }
 
 // importedBy is the import path ident resolves to, or empty when ident does
