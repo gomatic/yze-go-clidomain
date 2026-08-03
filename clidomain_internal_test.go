@@ -70,20 +70,75 @@ func TestVariadicSpellingReadsTheSourceName(t *testing.T) {
 	want := assert.New(t)
 
 	qualified := &ast.SelectorExpr{X: &ast.Ident{Name: "domain"}, Sel: &ast.Ident{Name: "Argument"}}
-	want.Equal(sharedArgument, variadicSpelling(declWith(&ast.Ellipsis{Elt: qualified})))
+	want.Equal(sharedArgument, spellingOf(variadicSelector(declWith(&ast.Ellipsis{Elt: qualified}))))
 
 	other := &ast.SelectorExpr{X: &ast.Ident{Name: "other"}, Sel: &ast.Ident{Name: "Argument"}}
-	want.Equal(qualifiedName("other.Argument"), variadicSpelling(declWith(&ast.Ellipsis{Elt: other})))
+	want.Equal(qualifiedName("other.Argument"), spellingOf(variadicSelector(declWith(&ast.Ellipsis{Elt: other}))))
 
-	want.Empty(variadicSpelling(nil), "no declaration spells nothing")
-	want.Empty(variadicSpelling(declWith(&ast.Ident{Name: "argument"})), "a non-variadic parameter")
-	want.Empty(variadicSpelling(&ast.FuncDecl{Type: &ast.FuncType{Params: &ast.FieldList{}}}), "no parameters")
+	want.Empty(spellingOf(variadicSelector(nil)), "no declaration spells nothing")
+	want.Empty(spellingOf(variadicSelector(declWith(&ast.Ident{Name: "argument"}))), "a non-variadic parameter")
+	want.Empty(
+		spellingOf(variadicSelector(&ast.FuncDecl{Type: &ast.FuncType{Params: &ast.FieldList{}}})),
+		"no parameters",
+	)
 
 	local := &ast.Ellipsis{Elt: &ast.Ident{Name: "argument"}}
-	want.Empty(variadicSpelling(declWith(local)), "a package-local alias is not a qualified name")
+	want.Empty(spellingOf(variadicSelector(declWith(local))), "a package-local alias is not a qualified name")
 
 	notAnIdent := &ast.Ellipsis{Elt: &ast.SelectorExpr{X: &ast.CallExpr{}, Sel: &ast.Ident{Name: "Argument"}}}
-	want.Empty(variadicSpelling(declWith(notAnIdent)), "a qualifier that is not a plain identifier")
+	want.Nil(variadicSelector(declWith(notAnIdent)), "a qualifier that is not a plain identifier")
+}
+
+// TestSharedVocabularyIsTheDomainRoot pins the derivation of the shared
+// vocabulary package's path from a domain command's: the internal/domain root
+// the command sits beneath, with or without a module prefix.
+func TestSharedVocabularyIsTheDomainRoot(t *testing.T) {
+	t.Parallel()
+	want := assert.New(t)
+
+	want.Equal(pkgPath("internal/domain"), sharedVocabulary("internal/domain/greet"))
+	want.Equal(pkgPath("github.com/o/r/internal/domain"),
+		sharedVocabulary("github.com/o/r/internal/domain/tenant/create"))
+}
+
+// TestImportedByResolvesOnlyPackageNames pins the qualifier resolution: an
+// identifier bound to an imported package yields that package's path, and one
+// bound to anything else — or to nothing — yields empty, so the impostor
+// check fails open rather than inventing a finding.
+func TestImportedByResolvesOnlyPackageNames(t *testing.T) {
+	t.Parallel()
+	want := assert.New(t)
+
+	ident := &ast.Ident{Name: "domain"}
+	vocab := types.NewPackage("example.com/mod/internal/vocab", "vocab")
+	info := &types.Info{Uses: map[*ast.Ident]types.Object{
+		ident: types.NewPkgName(0, nil, "domain", vocab),
+	}}
+
+	want.Equal(pkgPath("example.com/mod/internal/vocab"), importedBy(info, ident))
+	want.Empty(importedBy(&types.Info{}, ident), "an unresolved qualifier is not a package")
+}
+
+// TestImpostorPathNamesTheAliasedPackage pins the impostor check: a qualifier
+// aliasing a package other than the shared vocabulary is named, the genuine
+// vocabulary package is not, and an unresolved qualifier fails open.
+func TestImpostorPathNamesTheAliasedPackage(t *testing.T) {
+	t.Parallel()
+	want := assert.New(t)
+
+	ident := &ast.Ident{Name: "domain"}
+	sel := &ast.SelectorExpr{X: ident, Sel: &ast.Ident{Name: "Argument"}}
+	bound := func(path string) *types.Info {
+		pkg := types.NewPackage(path, "vocab")
+		return &types.Info{Uses: map[*ast.Ident]types.Object{ident: types.NewPkgName(0, nil, "domain", pkg)}}
+	}
+
+	want.Equal(pkgPath("example.com/mod/internal/vocab"),
+		impostorPath(bound("example.com/mod/internal/vocab"), sel, "example.com/mod/internal/domain/greet"))
+	want.Empty(impostorPath(bound("example.com/mod/internal/domain"), sel, "example.com/mod/internal/domain/greet"),
+		"the genuine vocabulary package is no impostor")
+	want.Empty(impostorPath(&types.Info{}, sel, "example.com/mod/internal/domain/greet"),
+		"an unresolved qualifier fails open")
 }
 
 // declWith builds a one-parameter function declaration carrying the given type.

@@ -22,7 +22,10 @@
 // violation, not a pass. Run itself must be a function; a package-level var or
 // a type named Run is the same violation. The variadic must use the SHARED
 // domain.Argument alias rather than a locally-redeclared one: both spellings
-// compile, so nothing but a rule keeps them from diverging.
+// compile, so nothing but a rule keeps them from diverging. Spelling alone is
+// not enough — the domain qualifier must also RESOLVE to the repo's shared
+// internal/domain vocabulary package, since importing any other package as
+// domain reproduces the spelling while defeating the rule.
 //
 // Scope is every package beneath internal/domain/, at any depth — a nested
 // verb like internal/domain/tenant/create is as much a verb as a top-level
@@ -50,6 +53,7 @@ const (
 	messageRun        = "domain package must declare the entry point Run(context.Context, *slog.Logger, Config, ...domain.Argument) (Result, error)"
 	messageSignature  = "Run must be a function taking (context.Context, *slog.Logger, Config, ...domain.Argument) and returning (Result, error), using THIS package's Config and Result"
 	messageLocalAlias = "Run's variadic must use the shared domain.Argument alias, not a package-local redeclaration; one concept spelled per-package is how the tiers drift"
+	messageImpostor   = "Run's variadic is spelled domain.Argument, but domain here is an import alias for %q, not the shared %q vocabulary package the contract names"
 	messageBehaviour  = "Config carries no behaviour: it holds the bound flags and is read by Run, so it declares no methods"
 )
 

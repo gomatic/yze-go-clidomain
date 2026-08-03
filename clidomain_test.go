@@ -19,7 +19,8 @@ func TestDomainContract(t *testing.T) {
 		"internal/domain/hollow", "internal/domain/malformed", "internal/domain/bare", "internal/domain/grouped",
 		"internal/domain/tenant", "internal/domain/tenant/create", "internal/domain/tenant/list",
 		"internal/domain/shape", "internal/domain/varrun", "internal/domain/impostor",
-		"internal/domain/exttest", "internal/domain/grouphelp", "internal/domain/aliasmethods")
+		"internal/domain/exttest", "internal/domain/grouphelp", "internal/domain/aliasmethods",
+		"internal/domain/vocabalias")
 }
 
 // TestTheSharedVocabularyPackageIsNotACommand pins that internal/domain itself
