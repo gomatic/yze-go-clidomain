@@ -51,9 +51,14 @@
 // ending in _test or a path ending in .test is a thing an author writes.
 //
 // A missing-contract report anchors at the package clause of the verb's FIRST
-// PRODUCTION file. The runner registers this analyzer source-only and drops
-// every finding a _test.go file holds, so anchoring one there does not move
-// the finding — it deletes it.
+// PRODUCTION file, because a finding a _test.go file holds is dropped rather
+// than relocated: this analyzer's Registration below declares no TestScope,
+// and the scope is instead applied by the runner's catalog, which lists
+// clidomain in its sourceOnly set (gomatic/yze registrations.go:76, verified
+// 2026-08-15). That is a claim about ANOTHER repository, so it is cited rather
+// than asserted — nothing here fails if it changes, and a reader can check it.
+// Anchoring in a test file would therefore not move the finding, it would
+// delete it.
 package clidomain
 
 import (

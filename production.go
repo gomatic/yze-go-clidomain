@@ -20,8 +20,10 @@ import (
 
 // productionAnchor is where a missing-contract report belongs: the package
 // clause of the verb's FIRST PRODUCTION file. A finding a _test.go file holds
-// is dropped by the source-only runner, so anchoring one there deletes it
-// rather than moving it. A verb always has a production file, because
+// is dropped by the runner, which applies the source-only scope this analyzer
+// does not declare for itself (see the package comment for where that lives
+// and when it was checked), so anchoring one there deletes it rather than
+// moving it. A verb always has a production file, because
 // declaresContract answers to a production declaration; token.NoPos is the
 // total answer for a package that has none.
 func productionAnchor(pass *analysis.Pass) token.Pos {
