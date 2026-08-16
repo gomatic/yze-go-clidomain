@@ -5,3 +5,6 @@ package tenant
 
 // Normalize canonicalises a tenant name for the verbs beneath this package.
 func Normalize(raw string) string { return raw }
+
+// Argument is the vocabulary this group extends for its own subcommands.
+type Argument = string

@@ -41,36 +41,54 @@ func reportVariadic(pass *analysis.Pass, fn *types.Func, sig *types.Signature) {
 // finding.
 func impostorPath(info *types.Info, sel *ast.SelectorExpr, pkg packagePath) pkgPath {
 	imported := importedBy(info, sel.X.(*ast.Ident))
-	if imported == "" || speaks(pkg, imported) {
+	if imported == nil || speaks(pkg, imported) {
 		return ""
 	}
-	return imported
+	return pkgPath(imported.Path())
 }
 
 // speaks reports whether a verb package may take its vocabulary from imported:
-// the internal/domain root it sits beneath, or any group package between that
+// the internal/domain root it sits beneath, or a GROUP package between that
 // root and the verb. A command group extends the root vocabulary for its own
-// subcommands — internal/domain/client for the client verbs — so an ancestor
-// is the shared vocabulary at its own level. A package that is not an ancestor
-// is not this verb's vocabulary, however it is aliased: another group's
-// package is borrowed, and anything outside internal/domain is an impostor.
-func speaks(verb packagePath, imported pkgPath) bool {
-	root := sharedVocabulary(verb)
-	if imported == root {
+// subcommands — internal/domain/client for the client verbs — so a group
+// ancestor is the shared vocabulary at its own level. An ancestor that
+// declares the contract is a VERB rather than a group, and a verb's types are
+// its own: borrowing them makes one command's private spelling the next
+// command's vocabulary, which is the drift the shared alias exists to stop. A
+// package that is not an ancestor at all is not this verb's vocabulary however
+// it is aliased — another group's package is borrowed, and anything outside
+// internal/domain is an impostor, including an ancestor above the tier.
+func speaks(verb packagePath, imported *types.Package) bool {
+	path, root := pkgPath(imported.Path()), sharedVocabulary(verb)
+	if path == root {
 		return true
 	}
-	return strings.HasPrefix(string(imported), string(root)+"/") &&
-		strings.HasPrefix(string(verb), string(imported)+"/")
+	return strings.HasPrefix(string(path), string(root)+"/") &&
+		strings.HasPrefix(string(verb), string(path)+"/") &&
+		!declaresCommand(imported)
 }
 
-// importedBy is the import path ident resolves to, or empty when ident does
-// not name an imported package.
-func importedBy(info *types.Info, ident *ast.Ident) pkgPath {
+// declaresCommand reports whether pkg declares any element of the domain
+// contract, which is what makes a package beneath the tier a verb rather than
+// a group package. It is declaresContract's question asked of an IMPORTED
+// package, whose scope carries production declarations only.
+func declaresCommand(pkg *types.Package) bool {
+	for _, want := range contract {
+		if pkg.Scope().Lookup(string(want.name)) != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// importedBy is the package ident resolves to, or nil when ident does not name
+// an imported package.
+func importedBy(info *types.Info, ident *ast.Ident) *types.Package {
 	pkg, ok := info.ObjectOf(ident).(*types.PkgName)
 	if !ok {
-		return ""
+		return nil
 	}
-	return pkgPath(pkg.Imported().Path())
+	return pkg.Imported()
 }
 
 // sharedVocabulary is the import path of the shared vocabulary package for a

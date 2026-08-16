@@ -10,7 +10,7 @@ import (
 type argument = string
 
 // Config here wrongly carries behaviour.
-type Config struct { // want "Config carries no behaviour"
+type Config struct { // want "Config must carry no behaviour"
 	Name string
 }
 

@@ -13,7 +13,7 @@ import (
 )
 
 // Config aliases the shared flag record — importing its behaviour.
-type Config = shape.Flags // want "Config carries no behaviour"
+type Config = shape.Flags // want "Config must carry no behaviour"
 
 // Result is the outcome.
 type Result struct{ Out string }

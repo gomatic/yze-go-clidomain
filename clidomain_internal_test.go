@@ -1,12 +1,12 @@
 package clidomain
 
 import (
-	"go/ast"
 	"go/token"
 	"go/types"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/tools/go/analysis"
 )
 
 // TestIsPackageTypeMatchesByImportPath pins the type classifier's guards: a
@@ -59,123 +59,69 @@ func TestIsDomainCommandBoundsTheScope(t *testing.T) {
 	want.False(isDomainCommand("internal/app/commands/greet"))
 	want.False(isDomainCommand("internal/greeting"))
 	want.False(isDomainCommand("myinternal/domain/greet"), "a segment merely ending in the tier name is not the tier")
+	want.False(isDomainCommand("internal/domainx/greet"), "a segment merely STARTING with the tier name is not it")
+	want.False(isDomainCommand("internal/domainx"), "nor is the look-alike segment itself")
 }
 
-// TestVariadicSpellingReadsTheSourceName pins that the check reads how the
-// variadic was WRITTEN, not what it resolves to: a shared qualified alias, a
-// package-local one, a bare type, a non-variadic signature, and a missing
-// declaration are each distinguished.
-func TestVariadicSpellingReadsTheSourceName(t *testing.T) {
+// TestHasBehaviourFindsBehaviourOnConfig pins the behaviour check against a
+// type built here rather than parsed: a type with a method has behaviour, and
+// a type with none — or one that is not a named type at all — has none. The
+// routes behaviour ARRIVES by (embedding, an interface, a pointer receiver)
+// are pinned by the fixtures, which is where a promoted method is real.
+func TestHasBehaviourFindsBehaviourOnConfig(t *testing.T) {
 	t.Parallel()
 	want := assert.New(t)
+	pass := &analysis.Pass{Fset: token.NewFileSet()}
 
-	qualified := &ast.SelectorExpr{X: &ast.Ident{Name: "domain"}, Sel: &ast.Ident{Name: "Argument"}}
-	want.Equal(sharedArgument, spellingOf(variadicSelector(declWith(&ast.Ellipsis{Elt: qualified}))))
-
-	other := &ast.SelectorExpr{X: &ast.Ident{Name: "other"}, Sel: &ast.Ident{Name: "Argument"}}
-	want.Equal(qualifiedName("other.Argument"), spellingOf(variadicSelector(declWith(&ast.Ellipsis{Elt: other}))))
-
-	want.Empty(spellingOf(variadicSelector(nil)), "no declaration spells nothing")
-	want.Empty(spellingOf(variadicSelector(declWith(&ast.Ident{Name: "argument"}))), "a non-variadic parameter")
-	want.Empty(
-		spellingOf(variadicSelector(&ast.FuncDecl{Type: &ast.FuncType{Params: &ast.FieldList{}}})),
-		"no parameters",
-	)
-
-	local := &ast.Ellipsis{Elt: &ast.Ident{Name: "argument"}}
-	want.Empty(spellingOf(variadicSelector(declWith(local))), "a package-local alias is not a qualified name")
-
-	notAnIdent := &ast.Ellipsis{Elt: &ast.SelectorExpr{X: &ast.CallExpr{}, Sel: &ast.Ident{Name: "Argument"}}}
-	want.Nil(variadicSelector(declWith(notAnIdent)), "a qualifier that is not a plain identifier")
-}
-
-// TestSharedVocabularyIsTheDomainRoot pins the derivation of the shared
-// vocabulary package's path from a domain command's: the internal/domain root
-// the command sits beneath, with or without a module prefix.
-func TestSharedVocabularyIsTheDomainRoot(t *testing.T) {
-	t.Parallel()
-	want := assert.New(t)
-
-	want.Equal(pkgPath("internal/domain"), sharedVocabulary("internal/domain/greet"))
-	want.Equal(pkgPath("github.com/o/r/internal/domain"),
-		sharedVocabulary("github.com/o/r/internal/domain/tenant/create"))
-}
-
-// TestImportedByResolvesOnlyPackageNames pins the qualifier resolution: an
-// identifier bound to an imported package yields that package's path, and one
-// bound to anything else — or to nothing — yields empty, so the impostor
-// check fails open rather than inventing a finding.
-func TestImportedByResolvesOnlyPackageNames(t *testing.T) {
-	t.Parallel()
-	want := assert.New(t)
-
-	ident := &ast.Ident{Name: "domain"}
-	vocab := types.NewPackage("example.com/mod/internal/vocab", "vocab")
-	info := &types.Info{Uses: map[*ast.Ident]types.Object{
-		ident: types.NewPkgName(0, nil, "domain", vocab),
-	}}
-
-	want.Equal(pkgPath("example.com/mod/internal/vocab"), importedBy(info, ident))
-	want.Empty(importedBy(&types.Info{}, ident), "an unresolved qualifier is not a package")
-}
-
-// TestImpostorPathNamesTheAliasedPackage pins the impostor check: a qualifier
-// aliasing a package other than the shared vocabulary is named, the genuine
-// vocabulary package is not, and an unresolved qualifier fails open.
-func TestImpostorPathNamesTheAliasedPackage(t *testing.T) {
-	t.Parallel()
-	want := assert.New(t)
-
-	ident := &ast.Ident{Name: "domain"}
-	sel := &ast.SelectorExpr{X: ident, Sel: &ast.Ident{Name: "Argument"}}
-	bound := func(path string) *types.Info {
-		pkg := types.NewPackage(path, "vocab")
-		return &types.Info{Uses: map[*ast.Ident]types.Object{ident: types.NewPkgName(0, nil, "domain", pkg)}}
-	}
-
-	want.Equal(pkgPath("example.com/mod/internal/vocab"),
-		impostorPath(bound("example.com/mod/internal/vocab"), sel, "example.com/mod/internal/domain/greet"))
-	want.Empty(impostorPath(bound("example.com/mod/internal/domain"), sel, "example.com/mod/internal/domain/greet"),
-		"the genuine vocabulary package is no impostor")
-	want.Empty(impostorPath(&types.Info{}, sel, "example.com/mod/internal/domain/greet"),
-		"an unresolved qualifier fails open")
-}
-
-// declWith builds a one-parameter function declaration carrying the given type.
-func declWith(paramType ast.Expr) *ast.FuncDecl {
-	return &ast.FuncDecl{Type: &ast.FuncType{
-		Params: &ast.FieldList{List: []*ast.Field{{Type: paramType}}},
-	}}
-}
-
-// TestDeclAtFindsTheDeclarationOrNothing pins the lookup: the declaration at a
-// position is returned, and an unknown position yields nothing rather than a
-// nil dereference downstream.
-func TestDeclAtFindsTheDeclarationOrNothing(t *testing.T) {
-	t.Parallel()
-
-	name := &ast.Ident{Name: "Run", NamePos: token.Pos(42)}
-	decl := &ast.FuncDecl{Name: name, Type: &ast.FuncType{Params: &ast.FieldList{}}}
-	files := []*ast.File{{Decls: []ast.Decl{&ast.GenDecl{}, decl}}}
-
-	assert.Same(t, decl, declAt(files, token.Pos(42)))
-	assert.Nil(t, declAt(files, token.Pos(99)), "an unknown position finds nothing")
-	assert.Nil(t, declAt(nil, token.Pos(42)), "no files find nothing")
-}
-
-// TestHasMethodsFindsBehaviourOnConfig pins the behaviour check: a type with a
-// method has behaviour, and a type with none — or one that is not a named type
-// at all — has none.
-func TestHasMethodsFindsBehaviourOnConfig(t *testing.T) {
-	t.Parallel()
-	want := assert.New(t)
-
-	want.False(hasMethods(types.Typ[types.String]), "a basic type declares no method")
+	want.False(hasBehaviour(pass, types.Typ[types.String]), "a basic type declares no method")
 
 	bare := types.NewNamed(types.NewTypeName(0, nil, "Config", nil), types.NewStruct(nil, nil), nil)
-	want.False(hasMethods(bare), "a Config with no methods carries no behaviour")
+	want.False(hasBehaviour(pass, bare), "a Config with no methods carries no behaviour")
 
 	sig := types.NewSignatureType(types.NewVar(0, nil, "c", bare), nil, nil, nil, nil, false)
 	bare.AddMethod(types.NewFunc(token.Pos(7), nil, "Validate", sig))
-	want.True(hasMethods(bare), "a declared method is behaviour")
+	want.True(hasBehaviour(pass, bare), "a declared method is behaviour")
+}
+
+// TestHasContractShapeRejectsAGenericRun pins the single difference a type
+// parameter makes. The signature built here is the contract's, element for
+// element; adding one type parameter and changing nothing else must reject it,
+// because the type argument is inferable from no part of the call the CLI tier
+// writes, so the entry point the contract names is one nothing can call. The
+// generic fixture proves the same thing end to end; this proves that the type
+// parameter, and not some other element of that fixture, is what does it.
+func TestHasContractShapeRejectsAGenericRun(t *testing.T) {
+	t.Parallel()
+	want := assert.New(t)
+
+	verb := types.NewPackage("m/internal/domain/greet", "greet")
+	declare := func(name string) *types.Named {
+		named := types.NewNamed(types.NewTypeName(0, verb, name, nil), types.NewStruct(nil, nil), nil)
+		verb.Scope().Insert(named.Obj())
+		return named
+	}
+	foreign := func(path, pkgName, name string) *types.Named {
+		pkg := types.NewPackage(path, pkgName)
+		return types.NewNamed(types.NewTypeName(0, pkg, name, nil), types.NewStruct(nil, nil), nil)
+	}
+
+	params := types.NewTuple(
+		types.NewParam(0, verb, "ctx", foreign("context", "context", "Context")),
+		types.NewParam(0, verb, "log", types.NewPointer(foreign("log/slog", "slog", "Logger"))),
+		types.NewParam(0, verb, "cfg", declare("Config")),
+		types.NewParam(0, verb, "args", types.NewSlice(types.Typ[types.String])),
+	)
+	results := types.NewTuple(
+		types.NewParam(0, verb, "", declare("Result")),
+		types.NewParam(0, verb, "", types.Universe.Lookup("error").Type()),
+	)
+	pass := &analysis.Pass{Fset: token.NewFileSet(), Pkg: verb}
+
+	want.True(hasContractShape(pass, types.NewSignatureType(nil, nil, nil, params, results, true)),
+		"the contract's own signature, element for element")
+
+	parameterised := types.NewTypeParam(types.NewTypeName(0, verb, "T", nil), types.NewInterfaceType(nil, nil))
+	generic := types.NewSignatureType(nil, nil, []*types.TypeParam{parameterised}, params, results, true)
+	want.False(hasContractShape(pass, generic),
+		"the same signature carrying one type parameter is an entry point nothing can call")
 }
